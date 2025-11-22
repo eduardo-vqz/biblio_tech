@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-class AutorLibro
+class LibroAutor
 {
     private int $id_libro;
     private int $id_autor;

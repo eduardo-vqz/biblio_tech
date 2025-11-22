@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-class Categoria
+class Categorias
 {
 
     private ?int $id_categoria;

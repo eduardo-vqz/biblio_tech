@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-class Libro
+class Libros
 {
     //Propiedades del modelo
     private ?int $id_libro;
