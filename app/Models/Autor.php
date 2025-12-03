@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-class Autores{
+class Autor{
     private ?int $id_autor;
     private string $nombre;
     private string $apellido;
