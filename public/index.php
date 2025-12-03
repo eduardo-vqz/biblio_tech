@@ -4,6 +4,7 @@ require_once __DIR__ . '/../app/Config/config.php';
 
 use App\Controllers\HomeController;
 use App\Controllers\LibroController;
+use App\Controllers\CategoriaController;
 // más use según vayas creando controladores
 
 $controllerName = $_GET['c'] ?? 'home';
@@ -12,7 +13,7 @@ $action         = $_GET['a'] ?? 'index';
 $controllerClassMap = [
     'home'  => HomeController::class,
     'libro' => LibroController::class,
-    // 'categoria' => CategoriaController::class,
+    'categoria' => CategoriaController::class,
     // 'autor'     => AutorController::class,
 ];
 
