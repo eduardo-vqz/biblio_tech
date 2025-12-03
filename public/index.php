@@ -58,7 +58,7 @@ if (isset($_SESSION['usuario']) && !in_array($controllerName, $publicControllers
             exit;
         }
 
-        include $viewFile;
+        include_once $viewFile;
         exit;
     }
 }
