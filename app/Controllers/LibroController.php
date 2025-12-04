@@ -23,48 +23,49 @@ class LibroController
         $this->libroAutorRepo = new LibroAutorRepository();
     }
 
-    // LISTADO DE LIBROS
     public function index(): void
     {
-        // El repo puede traer ya la categoría unida (si lo programaste así)
         $libros = $this->libroRepo->findAll();
+
+        // opcional: traer autores por libro para mostrar en la tabla
+        $autoresPorLibro = [];
+        foreach ($libros as $libro) {
+            $autoresPorLibro[$libro->getIdLibro()] = $this->libroAutorRepo->findAutoresByLibro($libro->getIdLibro());
+        }
 
         $viewFile = __DIR__ . '/../../view/libros/listado.php';
         include __DIR__ . '/../../view/layout/main_layout.php';
     }
 
-    // FORMULARIO NUEVO LIBRO
     public function create(): void
     {
-        $libro       = new Libro();               // objeto vacío
+        $libro       = new Libro();
         $categorias  = $this->categoriaRepo->findAll();
         $autores     = $this->autorRepo->findAll();
-        $autoresSel  = [];                        // ningún autor seleccionado
+        $autoresSel  = [];
 
         $viewFile = __DIR__ . '/../../view/libros/formulario.php';
         include __DIR__ . '/../../view/layout/main_layout.php';
     }
 
-    // GUARDAR NUEVO LIBRO
     public function store(): void
     {
-        $titulo          = trim($_POST['titulo']          ?? '');
-        $isbn            = trim($_POST['isbn']            ?? '');
+        $titulo          = trim($_POST['titulo'] ?? '');
+        $isbn            = trim($_POST['isbn'] ?? '');
         $anioPublicacion = (int)($_POST['anio_publicacion'] ?? 0);
-        $idCategoria     = (int)($_POST['id_categoria']   ?? 0);
-        $descripcion     = trim($_POST['descripcion']     ?? '');
-        $stockTotal      = (int)($_POST['stock_total']    ?? 0);
+        $idCategoria     = (int)($_POST['id_categoria'] ?? 0);
+        $descripcion     = trim($_POST['descripcion'] ?? '');
+        $stockTotal      = (int)($_POST['stock_total'] ?? 0);
         $stockDisp       = (int)($_POST['stock_disponible'] ?? $stockTotal);
-        $estado          = trim($_POST['estado']          ?? 'DISPONIBLE');
+        $estado          = trim($_POST['estado'] ?? 'DISPONIBLE');
 
         if ($titulo === '' || $idCategoria <= 0) {
             header('Location: index.php?c=libro&a=create');
             exit;
         }
 
-        // Creamos el modelo de Libro (ajusta los parámetros al orden de tu constructor)
         $libro = new Libro(
-            null,                 // id_libro
+            null,
             $titulo,
             $isbn,
             $anioPublicacion,
@@ -73,13 +74,11 @@ class LibroController
             $stockTotal,
             $stockDisp,
             $estado !== '' ? $estado : 'DISPONIBLE',
-            null                  // fecha_registro (la pone la BD)
+            null
         );
 
-        // IMPORTANTE: LibroRepository::create debe devolver el ID insertado
         $idLibro = $this->libroRepo->create($libro);
 
-        // Autores seleccionados (puede venir vacío)
         $idsAutores = $_POST['autores'] ?? [];
         $this->libroAutorRepo->setAutoresForLibro($idLibro, $idsAutores);
 
@@ -87,11 +86,9 @@ class LibroController
         exit;
     }
 
-    // FORMULARIO EDITAR LIBRO
     public function edit(): void
     {
         $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-
         if ($id <= 0) {
             header('Location: index.php?c=libro&a=index');
             exit;
@@ -111,18 +108,17 @@ class LibroController
         include __DIR__ . '/../../view/layout/main_layout.php';
     }
 
-    // ACTUALIZAR LIBRO EXISTENTE
     public function update(): void
     {
-        $idLibro         = (int)($_POST['id_libro']       ?? 0);
-        $titulo          = trim($_POST['titulo']          ?? '');
-        $isbn            = trim($_POST['isbn']            ?? '');
+        $idLibro         = (int)($_POST['id_libro'] ?? 0);
+        $titulo          = trim($_POST['titulo'] ?? '');
+        $isbn            = trim($_POST['isbn'] ?? '');
         $anioPublicacion = (int)($_POST['anio_publicacion'] ?? 0);
-        $idCategoria     = (int)($_POST['id_categoria']   ?? 0);
-        $descripcion     = trim($_POST['descripcion']     ?? '');
-        $stockTotal      = (int)($_POST['stock_total']    ?? 0);
+        $idCategoria     = (int)($_POST['id_categoria'] ?? 0);
+        $descripcion     = trim($_POST['descripcion'] ?? '');
+        $stockTotal      = (int)($_POST['stock_total'] ?? 0);
         $stockDisp       = (int)($_POST['stock_disponible'] ?? $stockTotal);
-        $estado          = trim($_POST['estado']          ?? 'DISPONIBLE');
+        $estado          = trim($_POST['estado'] ?? 'DISPONIBLE');
 
         if ($idLibro <= 0 || $titulo === '' || $idCategoria <= 0) {
             header('Location: index.php?c=libro&a=index');
@@ -139,12 +135,11 @@ class LibroController
             $stockTotal,
             $stockDisp,
             $estado !== '' ? $estado : 'DISPONIBLE',
-            null     // fecha_registro: puedes conservar la anterior si tu modelo lo soporta
+            null
         );
 
         $this->libroRepo->update($libro);
 
-        // Actualizar autores asociados
         $idsAutores = $_POST['autores'] ?? [];
         $this->libroAutorRepo->setAutoresForLibro($idLibro, $idsAutores);
 
@@ -152,15 +147,12 @@ class LibroController
         exit;
     }
 
-    // ELIMINAR LIBRO
     public function delete(): void
     {
         $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
         if ($id > 0) {
-            // Primero borramos relaciones libro_autor
             $this->libroAutorRepo->deleteByLibro($id);
-            // Luego borramos el libro
             $this->libroRepo->delete($id);
         }
 

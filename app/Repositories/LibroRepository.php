@@ -1,219 +1,150 @@
 <?php
 namespace App\Repositories;
 
-use PDO;
-use RuntimeException;
 use App\Config\Cnn;
 use App\Models\Libro;
-use App\Models\Categoria;
+use PDO;
 
 class LibroRepository
 {
-    private PDO $db;
+    private Cnn $cnn;
 
     public function __construct()
     {
-        $cnn = new Cnn();
-        $this->db = $cnn->getConnection();
+        $this->cnn = new Cnn();
     }
 
-    // ==================================================
-    //   MAPEADOR FILA → MODELOS (Libro + Categoria)
-    // ==================================================
+    /**
+     * Convierte un row de la BD en un objeto Libro
+     */
     private function mapRowToLibro(array $row): Libro
     {
-        // Construimos la categoría solo si hay datos
-        $categoria = null;
-        if (isset($row['id_categoria']) && $row['id_categoria'] !== null) {
-            $categoria = new Categoria(
-                (int)$row['id_categoria'],
-                $row['categoria_nombre'] ?? '',
-                $row['categoria_descripcion'] ?? null
-            );
+        $libro = new Libro(
+            isset($row['id_libro']) ? (int)$row['id_libro'] : null,
+            $row['titulo']           ?? '',
+            $row['isbn']             ?? '',
+            isset($row['anio_publicacion']) ? (int)$row['anio_publicacion'] : 0,
+            isset($row['id_categoria']) ? (int)$row['id_categoria'] : 0,
+            $row['descripcion']      ?? null,
+            isset($row['stock_total']) ? (int)$row['stock_total'] : 0,
+            isset($row['stock_disponible']) ? (int)$row['stock_disponible'] : 0,
+            $row['estado']           ?? 'DISPONIBLE',
+            $row['fecha_registro']   ?? null
+        );
+
+        // Si viene el nombre de la categoría desde un JOIN
+        if (isset($row['nombre_categoria'])) {
+            $libro->setNombreCategoria($row['nombre_categoria']);
+        } elseif (isset($row['nombre'])) {
+            // Por si el alias quedó como "nombre"
+            $libro->setNombreCategoria($row['nombre']);
         }
 
-        return new Libro(
-            isset($row['id_libro']) ? (int)$row['id_libro'] : null,
-            $row['titulo'],
-            $row['isbn'] ?? null,
-            isset($row['id_categoria']) ? (int)$row['id_categoria'] : null,
-            $categoria,
-            (int)$row['stock_total'],
-            (int)$row['stock_disponible'],
-            $row['estado'],
-            $row['descripcion'] ?? null,
-            isset($row['anio_publicacion']) && $row['anio_publicacion'] !== null
-                ? (int)$row['anio_publicacion']
-                : null,
-            $row['fecha_registro'] ?? null
-        );
+        return $libro;
     }
 
-    // ==================================================
-    //   OBTENER TODOS LOS LIBROS (JOIN CATEGORÍAS)
-    // ==================================================
     /**
-     * @return Libro[]
+     * Obtener todos los libros (con nombre de categoría si se hace JOIN)
      */
     public function findAll(): array
     {
-        $sql = "SELECT
+        $sql = "SELECT 
                     l.id_libro,
                     l.titulo,
                     l.isbn,
                     l.anio_publicacion,
                     l.id_categoria,
-                    c.nombre      AS categoria_nombre,
-                    c.descripcion AS categoria_descripcion,
                     l.descripcion,
                     l.stock_total,
                     l.stock_disponible,
                     l.estado,
-                    l.fecha_registro
+                    l.fecha_registro,
+                    c.nombre AS nombre_categoria
                 FROM libros l
-                LEFT JOIN categorias c ON c.id_categoria = l.id_categoria
-                ORDER BY l.titulo ASC";
+                INNER JOIN categorias c ON c.id_categoria = l.id_categoria
+                ORDER BY l.id_libro DESC";
 
-        $stmt = $this->db->query($sql);
-        $rows = $stmt->fetchAll();
+        $rows = $this->cnn->fetchQuery($sql);
 
-        $libros = [];
+        $result = [];
         foreach ($rows as $row) {
-            $libros[] = $this->mapRowToLibro($row);
+            $result[] = $this->mapRowToLibro($row);
         }
-        return $libros;
+        return $result;
     }
 
-    // ==================================================
-    //   BUSCAR LIBRO POR ID (JOIN CATEGORÍAS)
-    // ==================================================
-    public function findById(int $id_libro): ?Libro
+    /**
+     * Buscar un libro por ID
+     */
+    public function findById(int $id): ?Libro
     {
-        $sql = "SELECT
+        $sql = "SELECT 
                     l.id_libro,
                     l.titulo,
                     l.isbn,
                     l.anio_publicacion,
                     l.id_categoria,
-                    c.nombre      AS categoria_nombre,
-                    c.descripcion AS categoria_descripcion,
                     l.descripcion,
                     l.stock_total,
                     l.stock_disponible,
                     l.estado,
-                    l.fecha_registro
+                    l.fecha_registro,
+                    c.nombre AS nombre_categoria
                 FROM libros l
-                LEFT JOIN categorias c ON c.id_categoria = l.id_categoria
-                WHERE l.id_libro = :id";
+                INNER JOIN categorias c ON c.id_categoria = l.id_categoria
+                WHERE l.id_libro = :id_libro
+                LIMIT 1";
 
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute([':id' => $id_libro]);
-        $row = $stmt->fetch();
+        $rows = $this->cnn->fetchQuery($sql, [':id_libro' => $id]);
 
-        if (!$row) {
+        if (empty($rows)) {
             return null;
         }
 
-        return $this->mapRowToLibro($row);
+        return $this->mapRowToLibro($rows[0]);
     }
 
-    // ==================================================
-    //   BÚSQUEDA POR TÍTULO Y/O CATEGORÍA
-    // ==================================================
     /**
-     * @return Libro[]
+     * Crear un nuevo libro y devolver el ID insertado
      */
-    public function search(?string $titulo = null, ?int $id_categoria = null): array
-    {
-        $where  = [];
-        $params = [];
-
-        if ($titulo !== null && $titulo !== '') {
-            $where[] = "l.titulo LIKE :titulo";
-            $params[':titulo'] = '%' . $titulo . '%';
-        }
-
-        if ($id_categoria !== null) {
-            $where[] = "l.id_categoria = :id_categoria";
-            $params[':id_categoria'] = $id_categoria;
-        }
-
-        $sql = "SELECT
-                    l.id_libro,
-                    l.titulo,
-                    l.isbn,
-                    l.anio_publicacion,
-                    l.id_categoria,
-                    c.nombre      AS categoria_nombre,
-                    c.descripcion AS categoria_descripcion,
-                    l.descripcion,
-                    l.stock_total,
-                    l.stock_disponible,
-                    l.estado,
-                    l.fecha_registro
-                FROM libros l
-                LEFT JOIN categorias c ON c.id_categoria = l.id_categoria";
-
-        if (!empty($where)) {
-            $sql .= " WHERE " . implode(' AND ', $where);
-        }
-
-        $sql .= " ORDER BY l.titulo ASC";
-
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute($params);
-        $rows = $stmt->fetchAll();
-
-        $libros = [];
-        foreach ($rows as $row) {
-            $libros[] = $this->mapRowToLibro($row);
-        }
-        return $libros;
-    }
-
-    // ==================================================
-    //   CREAR LIBRO (INSERT)
-    // ==================================================
     public function create(Libro $libro): int
     {
         $sql = "INSERT INTO libros
                     (titulo, isbn, anio_publicacion, id_categoria, descripcion,
-                     stock_total, stock_disponible, estado)
+                     stock_total, stock_disponible, estado, fecha_registro)
                 VALUES
                     (:titulo, :isbn, :anio_publicacion, :id_categoria, :descripcion,
-                     :stock_total, :stock_disponible, :estado)";
+                     :stock_total, :stock_disponible, :estado, NOW())";
 
-        $stmt = $this->db->prepare($sql);
-
-        $anio = $libro->getAnioPublicacion();
-        $categoria = $libro->getCategoria();
+        /** @var PDO $pdo */
+        $pdo = $this->cnn->getConnection();
+        $stmt = $pdo->prepare($sql);
 
         $stmt->execute([
             ':titulo'           => $libro->getTitulo(),
             ':isbn'             => $libro->getIsbn(),
-            ':anio_publicacion' => $anio !== null ? $anio : null,
-            ':id_categoria'     => $categoria?->getIdCategoria() ?? $libro->getIdCategoria(),
+            ':anio_publicacion' => $libro->getAnioPublicacion(),
+            ':id_categoria'     => $libro->getIdCategoria(),          // ← ya NO getCategoria()
             ':descripcion'      => $libro->getDescripcion(),
             ':stock_total'      => $libro->getStockTotal(),
             ':stock_disponible' => $libro->getStockDisponible(),
             ':estado'           => $libro->getEstado(),
         ]);
 
-        $id = (int)$this->db->lastInsertId();
-        $libro->setIdLibro($id);
-        return $id;
+        return (int)$pdo->lastInsertId();
     }
 
-    // ==================================================
-    //   ACTUALIZAR LIBRO (UPDATE)
-    // ==================================================
-    public function update(Libro $libro): bool
+    /**
+     * Actualizar un libro existente
+     */
+    public function update(Libro $libro): void
     {
         if ($libro->getIdLibro() === null) {
-            throw new RuntimeException("No se puede actualizar un libro sin ID.");
+            throw new \RuntimeException("No se puede actualizar un libro sin ID.");
         }
 
-        $sql = "UPDATE libros SET
+        $sql = "UPDATE libros
+                SET
                     titulo           = :titulo,
                     isbn             = :isbn,
                     anio_publicacion = :anio_publicacion,
@@ -224,16 +155,11 @@ class LibroRepository
                     estado           = :estado
                 WHERE id_libro = :id_libro";
 
-        $stmt = $this->db->prepare($sql);
-
-        $anio = $libro->getAnioPublicacion();
-        $categoria = $libro->getCategoria();
-
-        return $stmt->execute([
+        $this->cnn->executeQuery($sql, [
             ':titulo'           => $libro->getTitulo(),
             ':isbn'             => $libro->getIsbn(),
-            ':anio_publicacion' => $anio !== null ? $anio : null,
-            ':id_categoria'     => $categoria?->getIdCategoria() ?? $libro->getIdCategoria(),
+            ':anio_publicacion' => $libro->getAnioPublicacion(),
+            ':id_categoria'     => $libro->getIdCategoria(),          // ← aquí también
             ':descripcion'      => $libro->getDescripcion(),
             ':stock_total'      => $libro->getStockTotal(),
             ':stock_disponible' => $libro->getStockDisponible(),
@@ -242,31 +168,12 @@ class LibroRepository
         ]);
     }
 
-    // ==================================================
-    //   ELIMINAR LIBRO (DELETE)
-    // ==================================================
-    public function delete(int $id_libro): bool
+    /**
+     * Eliminar un libro por ID
+     */
+    public function delete(int $id): void
     {
-        $sql = "DELETE FROM libros WHERE id_libro = :id";
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute([':id' => $id_libro]);
-
-        return $stmt->rowCount() > 0;
-    }
-
-    // ==================================================
-    //   ACTUALIZAR SOLO STOCK DISPONIBLE
-    // ==================================================
-    public function actualizarStockDisponible(int $id_libro, int $nuevoStock): bool
-    {
-        $sql = "UPDATE libros 
-                SET stock_disponible = :stock_disponible
-                WHERE id_libro = :id_libro";
-
-        $stmt = $this->db->prepare($sql);
-        return $stmt->execute([
-            ':stock_disponible' => $nuevoStock,
-            ':id_libro'         => $id_libro
-        ]);
+        $sql = "DELETE FROM libros WHERE id_libro = :id_libro";
+        $this->cnn->executeQuery($sql, [':id_libro' => $id]);
     }
 }

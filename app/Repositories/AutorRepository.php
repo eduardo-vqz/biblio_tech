@@ -1,106 +1,49 @@
 <?php
+
 namespace App\Repositories;
 
-use PDO;
 use App\Config\Cnn;
 use App\Models\Autor;
 
 class AutorRepository
 {
-    private PDO $db;
+    private Cnn $cnn;
 
     public function __construct()
     {
-        $cnn = new Cnn();
-        $this->db = $cnn->getConnection();
+        $this->cnn = new Cnn();
     }
 
-    /** @return Autor[] */
-    public function findAll(): array
+    private function mapRowToAutor(array $row): Autor
     {
-        $sql = "SELECT id_autor, nombre, apellido, nacionalidad
-                FROM autores
-                ORDER BY apellido ASC, nombre ASC";
-        $stmt = $this->db->query($sql);
-        $rows = $stmt->fetchAll();
-
-        $autores = [];
-        foreach ($rows as $row) {
-            $autores[] = new Autor(
-                (int)$row['id_autor'],
-                $row['nombre'],
-                $row['apellido'],
-                $row['nacionalidad'] ?? null
-            );
-        }
-        return $autores;
-    }
-
-    public function findById(int $id_autor): ?Autor
-    {
-        $sql = "SELECT id_autor, nombre, apellido, nacionalidad
-                FROM autores
-                WHERE id_autor = :id";
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute([':id' => $id_autor]);
-        $row = $stmt->fetch();
-
-        if (!$row) {
-            return null;
-        }
-
+        // Ajusta a la firma real de tu modelo Autor
         return new Autor(
-            (int)$row['id_autor'],
-            $row['nombre'],
-            $row['apellido'],
-            $row['nacionalidad'] ?? null
+            isset($row['id_autor']) ? (int)$row['id_autor'] : null,
+            $row['nombre']   ?? '',
+            $row['apellido'] ?? ''
         );
     }
 
-    public function create(Autor $autor): int
+    public function findAll(): array
     {
-        $sql = "INSERT INTO autores (nombre, apellido, nacionalidad)
-                VALUES (:nombre, :apellido, :nacionalidad)";
+        $sql  = "SELECT id_autor, nombre, apellido FROM autores ORDER BY nombre, apellido";
+        $rows = $this->cnn->fetchQuery($sql);
 
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute([
-            ':nombre'       => $autor->getNombre(),
-            ':apellido'     => $autor->getApellido(),
-            ':nacionalidad' => $autor->getNacionalidad()
-        ]);
-
-        $id = (int)$this->db->lastInsertId();
-        $autor->setIdAutor($id);
-        return $id;
-    }
-
-    public function update(Autor $autor): bool
-    {
-        if ($autor->getIdAutor() === null) {
-            return false;
+        $result = [];
+        foreach ($rows as $row) {
+            $result[] = $this->mapRowToAutor($row);
         }
-
-        $sql = "UPDATE autores
-                SET nombre = :nombre,
-                    apellido = :apellido,
-                    nacionalidad = :nacionalidad
-                WHERE id_autor = :id";
-
-        $stmt = $this->db->prepare($sql);
-        return $stmt->execute([
-            ':nombre'       => $autor->getNombre(),
-            ':apellido'     => $autor->getApellido(),
-            ':nacionalidad' => $autor->getNacionalidad(),
-            ':id'           => $autor->getIdAutor()
-        ]);
+        return $result;
     }
 
-    public function delete(int $id_autor): bool
+    public function findById(int $id): ?Autor
     {
-        $sql = "DELETE FROM autores WHERE id_autor = :id";
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute([':id' => $id_autor]);
+        $sql  = "SELECT id_autor, nombre, apellido FROM autores WHERE id_autor = :id LIMIT 1";
+        $rows = $this->cnn->fetchQuery($sql, [':id' => $id]);
 
-        return $stmt->rowCount() > 0;
+        if (empty($rows)) {
+            return null;
+        }
+        return $this->mapRowToAutor($rows[0]);
     }
 }
