@@ -1,9 +1,0 @@
-/*
-USUARIOS POR DEFECTO
-USUARIO                         | CONTRASEÑA    | TIPO DE USUARIO
-ana.lopez@bibliotech.com        | HASH_FAKE_1   | ESTUDIANTE
-carlos.perez@bibliotech.com     | HASH_FAKE_2   | ESTUDIANTE
-laura.martinez@bibliotech.com   | HASH_FAKE_3   | BIBLIOTECARIO
-admin@bibliotech.com            | HASH_FAKE_4   | ADMIN
-
-*/
